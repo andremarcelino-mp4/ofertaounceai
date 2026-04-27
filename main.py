@@ -12,27 +12,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Conexão Ounce Stock
-MONGO_URL = "mongodb+srv://dbOncinha:Expotech2026@cluster0.ydxsizd.mongodb.net/?retryWrites=true&w=majority&connectTimeoutMS=3000"
+MONGO_URL = "mongodb+srv://dbOncinha:Expotech2026@cluster0.ydxsizd.mongodb.net/?retryWrites=true&w=majority"
 
 try:
     client = MongoClient(MONGO_URL)
     db = client["Oncinha"]
     col = db["ofertas_ia"]
-    client.admin.command('ping')
-    print("✅ Ounce Stock: Sistema de Ofertas Ativo (Busca por ID)")
+    print("✅ Ounce Stock: Conectado ao MongoDB")
 except Exception as e:
-    print(f"❌ Erro de conexão: {e}")
+    print(f"❌ Erro: {e}")
 
+@app.get("/api/frase/{produto_id}")
 @app.get("/api/frases/{produto_id}")
 async def get_frases(produto_id: int):
     try:
-        documento = col.find_one({"id": produto_id})
-        if documento and "frases" in documento:
-            return {"frases": documento["frases"]}
-        return {"frases": ["OFERTA EXCLUSIVA", "APROVEITE AGORA"]}
-    except Exception as e:
-        return {"frases": ["OUNCE STOCK", "SISTEMA ONLINE"]}
+        # Busca pelo campo 'id' que agora está preenchido como número
+        doc = col.find_one({"id": produto_id})
+        if doc and "frases" in doc:
+            return {"frases": doc["frases"]}
+        return {"frases": ["OUNCE STOCK", "OFERTA DO DIA"]}
+    except:
+        return {"frases": ["SISTEMA EM MANUTENÇÃO"]}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=3001)
