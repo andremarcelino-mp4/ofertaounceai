@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ounce Stock - Visor Inteligente</title>
+    <style>
+        :root { --glass: rgba(0, 0, 0, 0.6); --white: #ffffff; --accent: #ffaa00; }
+        body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+
+        /* Camadas de Vídeo .webm */
+        #video-wrapper { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+        video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transition: opacity 0.8s ease-in-out; opacity: 0; }
+        video.active { opacity: 1; z-index: 2; }
+
+        /* Overlay de Texto Ounce Stock */
+        #overlay-text { 
+            position: absolute; top: 0; left: 35%; width: 60%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 50; pointer-events: none; padding: 40px; box-sizing: border-box;
+        }
+
+        .phrase { 
+            font-size: clamp(3rem, 7vw, 6rem); font-weight: 900; color: var(--white);
+            text-transform: uppercase; text-align: center; opacity: 0; 
+            transition: opacity 0.8s ease-in-out; line-height: 1.1;
+            text-shadow: 0 10px 30px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.5);
+            width: 100%;
+        }
+        .phrase.visible { opacity: 1 !important; }
+
+        /* Painel de Controle (Botões) */
+        #control-panel {
+            position: fixed; bottom: 40px; right: 40px; z-index: 100;
+            display: flex; gap: 15px;
+            background: rgba(255, 255, 255, 0.1); padding: 15px;
+            border-radius: 15px; backdrop-filter: blur(15px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        button {
+            padding: 15px 30px; background: var(--glass); color: #fff;
+            border: 1px solid rgba(255,255,255,0.3); border-radius: 10px;
+            cursor: pointer; font-weight: bold; font-size: 1rem;
+            transition: all 0.3s;
+        }
+        
+        button:hover { background: rgba(255,255,255,0.3); transform: translateY(-3px); }
+        button.active-btn { background: var(--accent); color: #000; border-color: var(--accent); }
+    </style>
+</head>
+<body>
+
+    <div id="video-wrapper">
+        <video id="vid1" class="active" autoplay muted playsinline></video>
+        <video id="vid2" autoplay muted playsinline></video>
+    </div>
+
+    <div id="overlay-text">
+        <h1 id="text-target" class="phrase">CARREGANDO...</h1>
+    </div>
+
+    <div id="control-panel">
+        <button id="btn-coca" class="active-btn" onclick="changeProduct('COCA', this)">COCA-COLA</button>
+        <button id="btn-guarana" onclick="changeProduct('GUARANA', this)">GUARANÁ</button>
+        <button id="btn-leite" onclick="changeProduct('LEITE', this)">LEITE</button>
+    </div>
+
+    <script>
+        // MÁQUINA DE ESTADOS COMPLETA (.webm)
+        const assets = {
+            COCA: { 
+                loop: 'coca.webm', 
+                key: 'coca',
+                transTo: { GUARANA: 'tr_cocaguarana.webm', LEITE: 'tr_cocaleite.webm' }
+            },
+            GUARANA: { 
+                loop: 'guarana.webm', 
+                key: 'guarana',
+                transTo: { COCA: 'tr_guaracoca.webm', LEITE: 'tr_guaranaleite.webm' } // Certifique-se que tr_guaracoca.webm existe
+            },
+            LEITE: { 
+                loop: 'leite.webm', 
+                key: 'leite',
+                transTo: { COCA: 'tr_leitecoca.webm', GUARANA: 'tr_leiteguarana.webm' }
+            }
+        };
+
+        let currentMode = 'COCA';
+        let phrasesPool = ["BEM-VINDO"];
+        let phraseIdx = 0;
+        let isTransitioning = false;
+        let textInterval;
+        
+        const v1 = document.getElementById('vid1');
+        const v2 = document.getElementById('vid2');
+        let activeVid = v1;
+        let idleVid = v2;
+        const textElem = document.getElementById('text-target');
+
+        function swapVideos(src, isLoop = true, callback = null) {
+            idleVid.src = src;
+            idleVid.loop = isLoop;
+            idleVid.load();
+            idleVid.onloadeddata = () => {
+                idleVid.play();
+                idleVid.classList.add('active');
+                activeVid.classList.remove('active');
+                let temp = activeVid; activeVid = idleVid; idleVid = temp;
+                if (callback) activeVid.onended = callback;
+            };
+        }
+
+        // BUSCA AS FRASES DIRETAMENTE DO PYTHON
+        async function fetchPhrasesFromPython(produtoKey) {
+            try {
+                // Chama a rota dinâmica do FastAPI
+                const res = await fetch(`http://localhost:3001/api/frases/${produtoKey}`);
+                const json = await res.json();
+                phrasesPool = json.frases || ["OFERTA OUNCE STOCK"];
+            } catch (err) {
+                console.error("Erro ao buscar no Python:", err);
+                phrasesPool = ["PRODUTO DISPONÍVEL", "COMPRE AGORA"];
+            }
+            phraseIdx = 0;
+            updateText();
+        }
+
+        function updateText() {
+            textElem.classList.remove('visible');
+            setTimeout(() => {
+                textElem.innerText = phrasesPool[phraseIdx];
+                textElem.classList.add('visible');
+                phraseIdx = (phraseIdx + 1) % phrasesPool.length;
+            }, 800);
+        }
+
+        function rotatePhrases() {
+            clearInterval(textInterval);
+            textInterval = setInterval(() => { 
+                if (!isTransitioning) updateText(); 
+            }, 5000);
+        }
+
+        // FUNÇÃO ATIVADA PELOS BOTÕES
+        window.changeProduct = (targetMode, btnElement) => {
+            if (isTransitioning || currentMode === targetMode) return;
+            isTransitioning = true;
+
+            // Atualiza visual dos botões
+            document.querySelectorAll('#control-panel button').forEach(b => b.classList.remove('active-btn'));
+            btnElement.classList.add('active-btn');
+
+            // Identifica qual o vídeo de transição do atual para o destino
+            const transitionVideo = assets[currentMode].transTo[targetMode];
+
+            // 1. Toca a transição
+            swapVideos(transitionVideo, false, () => {
+                // 2. Transição acabou, atualiza o estado
+                currentMode = targetMode;
+                // 3. Busca frases novas do backend
+                fetchPhrasesFromPython(assets[currentMode].key);
+                // 4. Inicia o loop do novo produto
+                swapVideos(assets[currentMode].loop, true);
+                isTransitioning = false;
+            });
+        };
+
+        window.onload = () => {
+            activeVid.src = assets.COCA.loop;
+            activeVid.loop = true;
+            activeVid.play();
+            fetchPhrasesFromPython(assets.COCA.key);
+            rotatePhrases();
+        };
+    </script>
+</body>
+</html>
