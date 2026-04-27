@@ -11,8 +11,8 @@ print("\n--- TESTE DE DADOS OUNCE STOCK ---")
 produtos = col.find()
 
 for p in produtos:
-    p_id = p.get("id")
-    nome = p.get("produto", "Sem nome")
+    p_id = p.get("produto_id")
+    nome = p.get("nome", "Sem nome")
     frases = p.get("frases", [])
     print(f"ID: {p_id} | Produto: {nome} | Frases: {frases}")
 
