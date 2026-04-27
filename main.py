@@ -5,7 +5,6 @@ import uvicorn
 
 app = FastAPI()
 
-# Liberação de CORS para o frontend local
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,43 +12,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuração MongoDB 
-MONGO_URL = "mongodb+srv://dbOncinha:Expotech2026@cluster0.ydxsizd.mongodb.net/?retryWrites=true&w=majority&connectTimeoutMS=30000"
+# Conexão Ounce Stock
+MONGO_URL = "mongodb+srv://dbOncinha:Expotech2026@cluster0.ydxsizd.mongodb.net/?retryWrites=true&w=majority&connectTimeoutMS=3000"
 
 try:
     client = MongoClient(MONGO_URL)
     db = client["Oncinha"]
     col = db["ofertas_ia"]
     client.admin.command('ping')
-    print("✅ Ounce Stock DB Conectado!")
+    print("✅ Ounce Stock: Sistema de Ofertas Ativo (Busca por ID)")
 except Exception as e:
-    print(f"❌ Erro no MongoDB: {e}")
+    print(f"❌ Erro de conexão: {e}")
 
-@app.get("/api/frases/{produto}")
-async def get_frases(produto: str):
-    """
-    Recebe 'coca', 'guarana' ou 'leite' e busca as frases correspondentes.
-    """
-    # Mapeia as chaves do frontend para as palavras que estão no seu MongoDB
-    mapa_busca = {
-        "coca": "Coca-Cola",
-        "guarana": "Guaraná",
-        "leite": "Leite"
-    }
-    termo = mapa_busca.get(produto, produto)
-
+@app.get("/api/frases/{produto_id}")
+async def get_frases(produto_id: int):
     try:
-        # Busca no banco usando Regex (ignora se é maiúscula ou minúscula)
-        resultado = col.find_one({"produto": {"$regex": termo, "$options": "i"}})
-        
-        if resultado and "frases" in resultado:
-            return {"frases": resultado["frases"]}
-        else:
-            return {"frases": ["OFERTA ESPECIAL OUNCE STOCK", "CONFIRA!"]}
-            
+        documento = col.find_one({"id": produto_id})
+        if documento and "frases" in documento:
+            return {"frases": documento["frases"]}
+        return {"frases": ["OFERTA EXCLUSIVA", "APROVEITE AGORA"]}
     except Exception as e:
-        print(f"Erro na busca: {e}")
-        return {"frases": ["SISTEMA DE ESTOQUE", "QUALIDADE GARANTIDA"]}
+        return {"frases": ["OUNCE STOCK", "SISTEMA ONLINE"]}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=3001)
