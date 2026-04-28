@@ -3,66 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ounce AI - Visor </title>
+    <title>Ounce AI - Visor Cinematográfico</title>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
         :root { --accent: #ffcc00; }
         body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: 'Montserrat', sans-serif; }
-
         #video-wrapper { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; background: #000; }
-        video { 
-            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; 
-            object-fit: cover; transition: opacity 0.01s linear; opacity: 0; 
-        }
+        video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transition: opacity 0.2s linear; opacity: 0; }
         video.active { opacity: 1; z-index: 2; }
-
-        #overlay-text { 
-            position: absolute; top: 0; right: 0; width: 50%; height: 100%;
-            display: flex; align-items: center; justify-content: center; z-index: 999; 
-            pointer-events: none; padding: 40px; box-sizing: border-box;
-        }
-
-        .phrase { 
-            font-size: clamp(1.2rem, 2.5vw, 2.2rem); font-weight: 900; color: #ffffff;
-            text-transform: uppercase; text-align: center; line-height: 1.2;
-            padding: 40px; border-radius: 40px; max-width: 90%;
-            opacity: 0; transform: translateY(30px) scale(0.9);
-            background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px); border: 2px solid rgba(255, 255, 255, 0.4);
-            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-        }
+        #overlay-text { position: absolute; top: 0; right: 0; width: 50%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 999; pointer-events: none; padding: 40px; box-sizing: border-box; }
+        .phrase { font-size: clamp(1.2rem, 2.5vw, 2.2rem); font-weight: 900; color: #ffffff; text-transform: uppercase; text-align: center; line-height: 1.2; padding: 40px; border-radius: 40px; max-width: 90%; opacity: 0; transform: translateY(30px) scale(0.9); background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 2px solid rgba(255, 255, 255, 0.4); transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1); }
         .phrase.visible { opacity: 1 !important; transform: translateY(0) scale(1) !important; }
-
-        #controls {
-            position: fixed; bottom: 30px; right: 30px; z-index: 1000;
-            display: flex; gap: 10px; background: rgba(0,0,0,0.7); 
-            padding: 15px; border-radius: 20px; backdrop-filter: blur(10px);
-        }
-        button {
-            padding: 12px 20px; background: transparent; color: white;
-            border: 1px solid rgba(255,255,255,0.3); border-radius: 12px;
-            cursor: pointer; font-weight: 900; transition: 0.3s;
-        }
+        #controls { position: fixed; bottom: 30px; right: 30px; z-index: 1000; display: flex; gap: 10px; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 20px; backdrop-filter: blur(10px); }
+        button { padding: 12px 20px; background: transparent; color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 12px; cursor: pointer; font-weight: 900; transition: 0.3s; }
         button.active { border-color: var(--accent); color: var(--accent); background: rgba(255,204,0,0.1); }
-        button:disabled { opacity: 0.3; cursor: wait; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
     </style>
 </head>
 <body>
 
     <div id="video-wrapper">
-        <video id="vid1" class="active" autoplay muted playsinline preload="auto"></video>
-        <video id="vid2" autoplay muted playsinline preload="auto"></video>
+        <video id="vid1" class="active" autoplay muted playsinline></video>
+        <video id="vid2" autoplay muted playsinline></video>
     </div>
 
     <div id="overlay-text"><h1 id="text-target" class="phrase"></h1></div>
 
     <div id="controls">
         <button id="btn-leite" onclick="changeProduct('LEITE', this)">LEITE</button>
-        <button id="btn-coca" onclick="changeProduct('COCA', this)">COCA-COLA</button>
+        <button id="btn-coca" onclick="changeProduct('COCA', this)">COCA</button>
         <button id="btn-guarana" onclick="changeProduct('GUARANA', this)">GUARANÁ</button>
     </div>
 
     <script>
+        const API_URL = "https://bug-free-space-trout-69wj5r565p4q29q7-3001.app.github.dev/api/frases/"; 
+        
+        // CORREÇÃO: Removido o prefixo 'videos/' pois os arquivos estão na raiz conforme a imagem
         const assets = {
             LEITE: { file: 'leite.webm', rev: 'rv_leite.webm', id: 3, to: { COCA: 'tr_leitecoca.webm', GUARANA: 'tr_leiteguarana.webm' } },
             COCA: { file: 'coca.webm', rev: 'rv_coca.webm', id: 4, to: { GUARANA: 'tr_cocaguarana.webm', LEITE: 'tr_cocaleite.webm' } },
@@ -70,15 +47,27 @@
         };
 
         let current = null, phrasesPool = ["OUNCE AI"], phraseIdx = 0;
-        let isTransitioning = false; 
-        
+        let isTransitioning = false;
         const v1 = document.getElementById('vid1'), v2 = document.getElementById('vid2');
         let activeVid = v1, idleVid = v2;
         const textElem = document.getElementById('text-target');
 
+        // MQTT: Gatilho automático pela balança
+        const mqtt = new Paho.MQTT.Client("broker.hivemq.com", 8000, "Visor_" + Math.random());
+        mqtt.onMessageArrived = (msg) => {
+            const data = JSON.parse(msg.payloadString);
+            const v = data.variacao;
+            if (v < -150) { 
+                let target = v <= -850 ? "LEITE" : (v <= -550 ? "GUARANA" : "COCA");
+                const btn = document.getElementById('btn-' + target.toLowerCase());
+                changeProduct(target, btn);
+            }
+        };
+        mqtt.connect({ onSuccess: () => mqtt.subscribe("xx/inventario/variacao") });
+
         async function fetchData(id) {
             try {
-                const res = await fetch(`https://bug-free-space-trout-69wj5r565p4q29q7-3001.app.github.dev/api/frase/${id}`);
+                const res = await fetch(`${API_URL}${id}`);
                 const data = await res.json();
                 if (data.frases) phrasesPool = data.frases;
             } catch (err) { phrasesPool = ["OUNCE AI"]; }
@@ -88,92 +77,72 @@
             activeVid.ontimeupdate = null;
             idleVid.src = src;
             idleVid.load();
-
             idleVid.onloadeddata = async () => {
-                idleVid.onloadeddata = null;
                 try {
                     await idleVid.play();
                     idleVid.classList.add('active'); 
                     activeVid.classList.remove('active');
-                    
-                    let oldVid = activeVid;
-                    activeVid = idleVid; 
-                    idleVid = oldVid;
+                    [activeVid, idleVid] = [idleVid, activeVid];
 
                     activeVid.ontimeupdate = function() {
-                        // AJUSTE: Tirei mais frames do final da transição (0.4s)
-                        const cutTime = (mode === 'TRANSITION') ? 0.7 : 0.5;
-                        
+                        const cutTime = (mode === 'TRANSITION') ? 0.4 : 0.2;
                         if (activeVid.currentTime >= activeVid.duration - cutTime) {
                             activeVid.ontimeupdate = null;
-                            
-                            if (mode === 'NORMAL_1') {
-                                // Inicia o reverso e mostra a frase IMEDIATAMENTE
+                            if (mode === 'NORMAL_1') { 
                                 showText(); 
-                                playVideo(assets[current].rev, 'REVERSE', onEnd);
-                            } 
-                            else if (mode === 'REVERSE') {
-                                playVideo(assets[current].file, 'NORMAL_FINAL', onEnd);
+                                playVideo(assets[current].rev, 'REVERSE', onEnd); 
                             }
-                            else if (mode === 'NORMAL_FINAL') {
-                                activeVid.pause();
-                                toggleButtons(true);
-                                if (onEnd) onEnd();
+                            else if (mode === 'REVERSE') { 
+                                playVideo(assets[current].file, 'NORMAL_FINAL', onEnd); 
                             }
-                            else if (mode === 'TRANSITION') {
-                                if (onEnd) onEnd();
+                            else if (mode === 'NORMAL_FINAL') { 
+                                activeVid.pause(); 
+                                toggleButtons(true); 
+                                if(onEnd) onEnd(); 
                             }
+                            else if (mode === 'TRANSITION' && onEnd) onEnd();
                         }
                     };
-                } catch (e) { console.warn("Play interrompido"); }
+                } catch (e) { console.error("Erro no play:", e); }
             };
         }
 
-        function toggleButtons(enable) {
-            document.querySelectorAll('#controls button').forEach(b => b.disabled = !enable);
-        }
-
-        function showText(customText) {
-            textElem.innerText = customText || phrasesPool[phraseIdx];
-            textElem.classList.add('visible'); 
-            if (!customText) phraseIdx = (phraseIdx + 1) % phrasesPool.length;
-        }
-
-        function hideText() {
-            textElem.classList.remove('visible'); 
-            setTimeout(() => { if(!textElem.classList.contains('visible')) textElem.innerText = ""; }, 400);
-        }
-
         async function changeProduct(target, btn) {
-            if(isTransitioning || (current && current === target)) return;
-            isTransitioning = true;
-            toggleButtons(false);
-            hideText(); 
-
+            if(isTransitioning || (current === target)) return;
+            isTransitioning = true; 
+            toggleButtons(false); 
+            hideText();
+            
             document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+            if(btn) btn.classList.add('active');
+            
+            await fetchData(assets[target].id);
 
-            const fetchPromise = fetchData(assets[target].id);
-
-            if (!current) {
-                current = target;
-                await fetchPromise;
-                playVideo(assets[current].file, 'NORMAL_1');
-                isTransitioning = false;
-                return;
+            if (!current) { 
+                current = target; 
+                playVideo(assets[current].file, 'NORMAL_1'); 
+                isTransitioning = false; 
+                return; 
             }
-
+            
             playVideo(assets[current].to[target], 'TRANSITION', async () => {
-                current = target;
-                await fetchPromise;
-                playVideo(assets[current].file, 'NORMAL_1');
+                current = target; 
+                playVideo(assets[current].file, 'NORMAL_1'); 
                 isTransitioning = false;
             });
         }
 
+        function showText() { 
+            textElem.innerText = phrasesPool[phraseIdx]; 
+            textElem.classList.add('visible'); 
+            phraseIdx = (phraseIdx + 1) % phrasesPool.length; 
+        }
+        function hideText() { textElem.classList.remove('visible'); }
+        function toggleButtons(e) { document.querySelectorAll('button').forEach(b => b.disabled = !e); }
+
         window.onload = () => {
-            showText("OUNCE AI");
-            toggleButtons(true);
+            textElem.innerText = "OUNCE AI";
+            textElem.classList.add('visible');
         };
     </script>
 </body>
