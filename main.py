@@ -26,8 +26,8 @@ except Exception as e:
 @app.get("/api/frases/{produto_id}")
 async def get_frases(produto_id: int):
     try:
-        # Busca pelo campo 'id' que agora está preenchido como número
-        doc = col.find_one({"id": produto_id})
+        # Busca pelo campo 'produto_id' que agora está preenchido como número
+        doc = col.find_one({"produto_id": produto_id})
         if doc and "frases" in doc:
             return {"frases": doc["frases"]}
         return {"frases": ["OUNCE STOCK", "OFERTA DO DIA"]}
