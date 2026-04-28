@@ -64,13 +64,13 @@
 
     <script>
         const assets = {
-            LEITE: { file: 'leite.webm', id: 3, to: { COCA: 'tr_leitecoca.webm', GUARANA: 'tr_leiteguarana.webm' } },
-            COCA: { file: 'coca.webm', id: 4, to: { GUARANA: 'tr_cocaguarana.webm', LEITE: 'tr_cocaleite.webm' } },
-            GUARANA: { file: 'guarana.webm', id: 5, to: { COCA: 'tr_guaranacoca.webm', LEITE: 'tr_guaranaleite.webm' } }
+            LEITE: { file: 'leite.webm', rev: 'rv_leite.webm', id: 3, to: { COCA: 'tr_leitecoca.webm', GUARANA: 'tr_leiteguarana.webm' } },
+            COCA: { file: 'coca.webm', rev: 'rv_coca.webm', id: 4, to: { GUARANA: 'tr_cocaguarana.webm', LEITE: 'tr_cocaleite.webm' } },
+            GUARANA: { file: 'guarana.webm', rev: 'rv_guarana.webm', id: 5, to: { COCA: 'tr_guaranacoca.webm', LEITE: 'tr_guaranaleite.webm' } }
         };
 
         let current = null, phrasesPool = ["OUNCE AI"], phraseIdx = 0;
-        let isTransitioning = false, reverseInterval = null; 
+        let isTransitioning = false; 
         
         const v1 = document.getElementById('vid1'), v2 = document.getElementById('vid2');
         let activeVid = v1, idleVid = v2;
@@ -84,22 +84,19 @@
             } catch (err) { phrasesPool = ["OUNCE AI"]; }
         }
 
-        async function playVideo(src, isMainProduct, onEnd) {
-            clearInterval(reverseInterval);
+        // Função de play otimizada com troca instantânea de canais (Active/Idle)
+        async function playVideo(src, mode, onEnd) {
             activeVid.ontimeupdate = null;
             
             idleVid.src = src;
             idleVid.load();
-            // Start ligeiramente adiantado para compensar o tempo de decodificação
-            idleVid.currentTime = 0.06;
+            idleVid.currentTime = 0.05;
 
-            // Espera o vídeo estar minimamente pronto para evitar o "stall"
             idleVid.oncanplaythrough = async () => {
                 idleVid.oncanplaythrough = null;
                 try {
                     await idleVid.play();
                     
-                    // Troca visual imediata após o play
                     idleVid.classList.add('active'); 
                     activeVid.classList.remove('active');
                     
@@ -108,44 +105,32 @@
                     idleVid = oldVid;
 
                     activeVid.ontimeupdate = function() {
-                        // Corte final agressivo para transição rápida
-                        const cutTime = isMainProduct ? 0.4 : 0.25;
+                        const cutTime = 0.3; // Corte de segurança para fluidez
                         if (activeVid.currentTime >= activeVid.duration - cutTime) {
                             activeVid.ontimeupdate = null;
-                            if (isMainProduct) {
+                            
+                            if (mode === 'NORMAL_1') {
+                                // Terminou primeiro play, vai para o REVERSE
+                                playVideo(assets[current].rev, 'REVERSE', onEnd);
+                            } 
+                            else if (mode === 'REVERSE') {
+                                // Durante o reverse o texto aparece
+                                showText();
+                                // Terminou o reverse, volta para o NORMAL final
+                                playVideo(assets[current].file, 'NORMAL_FINAL', onEnd);
+                            }
+                            else if (mode === 'NORMAL_FINAL') {
                                 activeVid.pause();
-                                startReverseSequence(onEnd);
-                            } else {
+                                toggleButtons(true);
+                                if (onEnd) onEnd();
+                            }
+                            else {
+                                // Caso seja transição
                                 if (onEnd) onEnd();
                             }
                         }
                     };
-                } catch (e) { console.error("Erro no play:", e); }
-            };
-        }
-
-        function startReverseSequence(onEnd) {
-            showText();
-            const decrement = 0.035; 
-            reverseInterval = setInterval(() => {
-                if (activeVid.currentTime <= 0.25) {
-                    clearInterval(reverseInterval);
-                    playFinalForward(onEnd);
-                } else {
-                    activeVid.currentTime -= decrement;
-                }
-            }, 35);
-        }
-
-        function playFinalForward(onEnd) {
-            activeVid.play();
-            activeVid.ontimeupdate = function() {
-                if (activeVid.currentTime >= activeVid.duration - 0.4) {
-                    activeVid.ontimeupdate = null;
-                    activeVid.pause();
-                    toggleButtons(true);
-                    if (onEnd) onEnd();
-                }
+                } catch (e) { console.error(e); }
             };
         }
 
@@ -178,26 +163,18 @@
             if (!current) {
                 current = target;
                 await fetchPromise;
-                playVideo(assets[current].file, true);
+                playVideo(assets[current].file, 'NORMAL_1');
                 isTransitioning = false;
                 return;
             }
 
-            // Transição
-            playVideo(assets[current].to[target], false, async () => {
+            // Executa transição entre produtos
+            playVideo(assets[current].to[target], 'TRANSITION', async () => {
                 current = target;
                 await fetchPromise;
-                // Play no vídeo principal sem atraso
-                playVideo(assets[current].file, true);
+                playVideo(assets[current].file, 'NORMAL_1');
                 isTransitioning = false;
             });
-
-            // Truque de pré-carregamento: coloca o vídeo do produto no buffer enquanto a transição toca
-            const preloader = document.createElement('link');
-            preloader.rel = 'preload';
-            preloader.as = 'video';
-            preloader.href = assets[target].file;
-            document.head.appendChild(preloader);
         }
 
         window.onload = () => {
