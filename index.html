@@ -19,15 +19,18 @@
         }
 
         .phrase { 
-            font-size: clamp(3.5rem, 9vw, 7.5rem); font-weight: 900; color: #fff;
+            /* Fonte diminuída conforme solicitado */
+            font-size: clamp(2rem, 5vw, 4.5rem); 
+            font-weight: 900; color: #fff;
             text-transform: uppercase; text-align: center; opacity: 0; 
             transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             line-height: 0.9; width: 100%;
             background: linear-gradient(180deg, #ffffff 30%, #999999 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             filter: drop-shadow(0px 10px 20px rgba(0,0,0,0.8));
+            transform: scale(0.8);
         }
-        .phrase.visible { opacity: 1; transform: scale(1.05); }
+        .phrase.visible { opacity: 1; transform: scale(1); }
 
         #controls {
             position: fixed; bottom: 30px; right: 30px; z-index: 100;
@@ -50,7 +53,7 @@
         <video id="vid2" autoplay muted playsinline></video>
     </div>
 
-    <div id="overlay-text"><h1 id="text-target" class="phrase">CARREGANDO...</h1></div>
+    <div id="overlay-text"><h1 id="text-target" class="phrase"></h1></div>
 
     <div id="controls">
         <button id="btn-leite" onclick="changeProduct('LEITE', this)">LEITE</button>
@@ -61,30 +64,47 @@
     <script>
         const assets = {
             LEITE: { file: 'leite.webm', id: 3, to: { COCA: 'tr_leitecoca.webm', GUARANA: 'tr_leiteguarana.webm' } },
-            COCA: { file: 'coca.mp4.webm', id: 4, to: { GUARANA: 'tr_cocaguara.webm', LEITE: 'tr_cocaleite.webm' } },
-            GUARANA: { file: 'guarana.webm', id: 5, to: { COCA: 'tr_guaracoca.webm', LEITE: 'tr_guaranaleite.webm' } }
+            COCA: { file: 'coca.webm', id: 4, to: { GUARANA: 'tr_cocaguarana.webm', LEITE: 'tr_cocaleite.webm' } },
+            GUARANA: { file: 'guarana.webm', id: 5, to: { COCA: 'tr_guaranacoca.webm', LEITE: 'tr_guaranaleite.webm' } }
         };
 
         let current = 'COCA';
         let phrasesPool = ["OUNCE STOCK"];
         let phraseIdx = 0;
         let isTransitioning = false;
+        let textTriggered = false; // Garante que a frase apareça só uma vez por loop
+        
         const v1 = document.getElementById('vid1'), v2 = document.getElementById('vid2');
         let activeVid = v1, idleVid = v2;
         const textElem = document.getElementById('text-target');
 
         function playVideo(src, isLoop, onEnd) {
-            idleVid.src = src; idleVid.loop = isLoop; idleVid.load();
+            idleVid.src = src; 
+            idleVid.loop = isLoop; 
+            idleVid.load();
+            textTriggered = false; // Reseta o gatilho de texto para o novo vídeo
+
             idleVid.onloadeddata = () => {
                 idleVid.play();
-                idleVid.classList.add('active'); activeVid.classList.remove('active');
+                idleVid.classList.add('active'); 
+                activeVid.classList.remove('active');
                 let t = activeVid; activeVid = idleVid; idleVid = t;
                 
                 if (!isLoop) {
                     activeVid.onended = onEnd;
+                    activeVid.ontimeupdate = null;
                 } else {
-                    // Pausa no último frame
+                    // Lógica para mostrar frase antes de pausar
                     activeVid.ontimeupdate = () => {
+                        const timeLeft = activeVid.duration - activeVid.currentTime;
+                        
+                        // Aparece a frase faltando 2.5 segundos para o fim
+                        if (timeLeft <= 2.5 && !textTriggered && !isTransitioning) {
+                            textTriggered = true;
+                            updateText();
+                        }
+
+                        // Pausa no último frame
                         if (activeVid.currentTime >= activeVid.duration - 0.1) {
                             activeVid.pause();
                             activeVid.ontimeupdate = null;
@@ -105,25 +125,28 @@
                 const data = await res.json();
                 phrasesPool = data.frases || ["OUNCE STOCK"];
             } catch { phrasesPool = ["OUNCE STOCK"]; }
-            phraseIdx = 0; updateText();
+            phraseIdx = 0;
         }
 
         function updateText() {
+            textElem.innerText = phrasesPool[phraseIdx];
+            textElem.classList.add('visible');
+            phraseIdx = (phraseIdx + 1) % phrasesPool.length;
+        }
+
+        function hideText() {
             textElem.classList.remove('visible');
-            setTimeout(() => {
-                textElem.innerText = phrasesPool[phraseIdx];
-                textElem.classList.add('visible');
-                phraseIdx = (phraseIdx + 1) % phrasesPool.length;
-            }, 800);
         }
 
         function changeProduct(target, btn) {
             if(isTransitioning || current === target) return;
+            
             isTransitioning = true;
+            hideText(); // Remove a frase imediatamente na troca
+
             document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            // Primeiro a transição, depois o vídeo do produto
             playVideo(assets[current].to[target], false, () => {
                 current = target;
                 fetchData(assets[current].id);
@@ -133,9 +156,8 @@
         }
 
         window.onload = () => {
-            playVideo(assets.COCA.file, true);
             fetchData(4);
-            setInterval(() => { if(!isTransitioning) updateText(); }, 5000);
+            playVideo(assets.COCA.file, true);
         };
     </script>
 </body>
