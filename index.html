@@ -9,6 +9,7 @@
         :root { --accent: #ffcc00; }
         body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: 'Montserrat', sans-serif; }
 
+        /* Camada 1: Vídeos */
         #video-wrapper { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
         video { 
             position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; 
@@ -16,35 +17,76 @@
         }
         video.active { opacity: 1; z-index: 2; }
 
+        /* Camada 2: Overlay de Texto (Metade Direita) */
         #overlay-text { 
-            position: absolute; top: 0; left: 50%; width: 50%; height: 100%;
-            display: flex; align-items: center; justify-content: center; z-index: 50; pointer-events: none;
-            padding: 40px; box-sizing: border-box;
+            position: absolute; 
+            top: 0; 
+            right: 0; 
+            width: 50%; 
+            height: 100%;
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            z-index: 999; /* Garante que fique acima de tudo */
+            pointer-events: none; 
+            padding: 40px;
+            box-sizing: border-box;
         }
 
+        /* O Card com Blur e Borda */
         .phrase { 
-            font-size: clamp(1.5rem, 3.5vw, 3rem); 
-            font-weight: 900; color: #fff;
-            text-transform: uppercase; text-align: center; opacity: 0; 
-            transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            line-height: 1.1; width: 100%;
-            background: linear-gradient(180deg, #ffffff 30%, #999999 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0px 10px 20px rgba(0,0,0,0.8));
-            transform: scale(0.9);
+            font-size: clamp(1.2rem, 2.5vw, 2.2rem); 
+            font-weight: 900; 
+            color: #ffffff;
+            text-transform: uppercase; 
+            text-align: center; 
+            line-height: 1.2;
+            padding: 40px; 
+            border-radius: 40px;
+            width: auto;
+            max-width: 90%;
+            
+            /* Estado Inicial: Invisível */
+            opacity: 0;
+            transform: translateY(30px) scale(0.9);
+            
+            /* Estilo Vidro (Glassmorphism) */
+            background: rgba(0, 0, 0, 0.5); /* Fundo escuro para contraste */
+            backdrop-filter: blur(0px);
+            -webkit-backdrop-filter: blur(0px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            
+            /* Transição */
+            transition: 
+                opacity 0.6s ease-out, 
+                transform 0.6s cubic-bezier(0.23, 1, 0.32, 1),
+                backdrop-filter 0.6s ease,
+                border 0.6s ease;
+            
+            /* Sombra suave */
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
         }
-        .phrase.visible { opacity: 1; transform: scale(1); }
 
+        /* Estado Ativo: Quando o JS adiciona .visible */
+        .phrase.visible { 
+            opacity: 1 !important; 
+            transform: translateY(0) scale(1) !important; 
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 2px solid rgba(255, 255, 255, 0.4); /* Contorno nítido */
+        }
+
+        /* Botões */
         #controls {
-            position: fixed; bottom: 30px; right: 30px; z-index: 100;
+            position: fixed; bottom: 30px; right: 30px; z-index: 1000;
             display: flex; gap: 10px; background: rgba(0,0,0,0.7); 
             padding: 15px; border-radius: 20px; backdrop-filter: blur(10px);
         }
-
         button {
-            padding: 12px 25px; background: transparent; color: white;
+            padding: 12px 20px; background: transparent; color: white;
             border: 1px solid rgba(255,255,255,0.3); border-radius: 12px;
             cursor: pointer; font-weight: 900; transition: 0.3s;
+            font-family: 'Montserrat', sans-serif;
         }
         button.active { border-color: var(--accent); color: var(--accent); background: rgba(255,204,0,0.1); }
     </style>
@@ -56,7 +98,9 @@
         <video id="vid2" autoplay muted playsinline preload="auto"></video>
     </div>
 
-    <div id="overlay-text"><h1 id="text-target" class="phrase"></h1></div>
+    <div id="overlay-text">
+        <h1 id="text-target" class="phrase"></h1>
+    </div>
 
     <div id="controls">
         <button id="btn-leite" onclick="changeProduct('LEITE', this)">LEITE</button>
@@ -83,18 +127,11 @@
 
         async function fetchData(id) {
             try {
-                // URL DA SUA API (Baseada no link que você enviou)
                 const apiUrl = `https://bug-free-space-trout-69wj5r565p4q29q7-3001.app.github.dev/api/frase/${id}`;
-                
-                console.log(`Buscando: ${apiUrl}`);
                 const res = await fetch(apiUrl);
-                
-                if (!res.ok) throw new Error(`Status: ${res.status}`);
-
+                if (!res.ok) throw new Error("API Offline");
                 const data = await res.json();
-                if (data.frases) {
-                    phrasesPool = data.frases;
-                }
+                if (data.frases && data.frases.length > 0) phrasesPool = data.frases;
             } catch (err) {
                 console.error("Erro na API:", err);
                 phrasesPool = ["OUNCE STOCK", "QUALIDADE PREMIUM"];
@@ -103,9 +140,7 @@
         }
 
         async function playVideo(src, isLoop, onEnd) {
-            if (idleVid.getAttribute('src') !== src) {
-                idleVid.src = src;
-            }
+            if (idleVid.getAttribute('src') !== src) idleVid.src = src;
             idleVid.loop = isLoop;
             textTriggered = false; 
 
@@ -121,10 +156,12 @@
                     } else {
                         activeVid.ontimeupdate = () => {
                             const timeLeft = activeVid.duration - activeVid.currentTime;
-                            if (timeLeft <= 2.0 && !textTriggered && !isTransitioning) {
+                            // Dispara o texto 2.5 segundos antes do fim do loop
+                            if (timeLeft <= 2.5 && !textTriggered && !isTransitioning) {
                                 textTriggered = true;
-                                updateText();
+                                showText();
                             }
+                            // Pausa no último frame para o loop controlado
                             if (activeVid.currentTime >= activeVid.duration - 0.1) {
                                 activeVid.pause();
                                 activeVid.ontimeupdate = null;
@@ -132,18 +169,20 @@
                         };
                     }
                 });
-            } catch (e) { console.warn(e); }
+            } catch (e) { console.warn("Aguardando interação..."); }
         }
 
-        function updateText() {
+        function showText() {
             textElem.innerText = phrasesPool[phraseIdx];
-            textElem.classList.add('visible');
+            textElem.classList.add('visible'); 
             phraseIdx = (phraseIdx + 1) % phrasesPool.length;
         }
 
         function hideText() {
-            textElem.classList.remove('visible');
-            setTimeout(() => { if(!textElem.classList.contains('visible')) textElem.innerText = ""; }, 500);
+            textElem.classList.remove('visible'); 
+            setTimeout(() => { 
+                if(!textElem.classList.contains('visible')) textElem.innerText = ""; 
+            }, 600);
         }
 
         async function changeProduct(target, btn) {
@@ -156,14 +195,16 @@
 
             const fetchPromise = fetchData(assets[target].id);
 
+            // Toca vídeo de transição
             playVideo(assets[current].to[target], false, async () => {
                 current = target;
-                await fetchPromise;
+                await fetchPromise; // Aguarda as frases novas
                 playVideo(assets[current].file, true);
                 isTransitioning = false;
             });
         }
 
+        // Início
         window.onload = async () => {
             await fetchData(4); 
             playVideo(assets.COCA.file, true);
