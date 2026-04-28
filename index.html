@@ -10,25 +10,28 @@
         body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: 'Montserrat', sans-serif; }
 
         #video-wrapper { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
-        video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transition: opacity 0.5s ease; opacity: 0; }
+        video { 
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; 
+            object-fit: cover; transition: opacity 0.5s ease-in-out; opacity: 0; 
+        }
         video.active { opacity: 1; z-index: 2; }
 
         #overlay-text { 
-            position: absolute; top: 0; left: 30%; width: 65%; height: 100%;
+            position: absolute; top: 0; left: 50%; width: 50%; height: 100%;
             display: flex; align-items: center; justify-content: center; z-index: 50; pointer-events: none;
+            padding: 40px; box-sizing: border-box;
         }
 
         .phrase { 
-            /* Fonte diminuída conforme solicitado */
-            font-size: clamp(2rem, 5vw, 4.5rem); 
+            font-size: clamp(1.5rem, 3.5vw, 3rem); 
             font-weight: 900; color: #fff;
             text-transform: uppercase; text-align: center; opacity: 0; 
             transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            line-height: 0.9; width: 100%;
+            line-height: 1.1; width: 100%;
             background: linear-gradient(180deg, #ffffff 30%, #999999 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             filter: drop-shadow(0px 10px 20px rgba(0,0,0,0.8));
-            transform: scale(0.8);
+            transform: scale(0.9);
         }
         .phrase.visible { opacity: 1; transform: scale(1); }
 
@@ -49,8 +52,8 @@
 <body>
 
     <div id="video-wrapper">
-        <video id="vid1" class="active" autoplay muted playsinline></video>
-        <video id="vid2" autoplay muted playsinline></video>
+        <video id="vid1" class="active" autoplay muted playsinline preload="auto"></video>
+        <video id="vid2" autoplay muted playsinline preload="auto"></video>
     </div>
 
     <div id="overlay-text"><h1 id="text-target" class="phrase"></h1></div>
@@ -72,60 +75,64 @@
         let phrasesPool = ["OUNCE STOCK"];
         let phraseIdx = 0;
         let isTransitioning = false;
-        let textTriggered = false; // Garante que a frase apareça só uma vez por loop
+        let textTriggered = false; 
         
         const v1 = document.getElementById('vid1'), v2 = document.getElementById('vid2');
         let activeVid = v1, idleVid = v2;
         const textElem = document.getElementById('text-target');
 
-        function playVideo(src, isLoop, onEnd) {
-            idleVid.src = src; 
-            idleVid.loop = isLoop; 
-            idleVid.load();
-            textTriggered = false; // Reseta o gatilho de texto para o novo vídeo
-
-            idleVid.onloadeddata = () => {
-                idleVid.play();
-                idleVid.classList.add('active'); 
-                activeVid.classList.remove('active');
-                let t = activeVid; activeVid = idleVid; idleVid = t;
-                
-                if (!isLoop) {
-                    activeVid.onended = onEnd;
-                    activeVid.ontimeupdate = null;
-                } else {
-                    // Lógica para mostrar frase antes de pausar
-                    activeVid.ontimeupdate = () => {
-                        const timeLeft = activeVid.duration - activeVid.currentTime;
-                        
-                        // Aparece a frase faltando 2.5 segundos para o fim
-                        if (timeLeft <= 2.5 && !textTriggered && !isTransitioning) {
-                            textTriggered = true;
-                            updateText();
-                        }
-
-                        // Pausa no último frame
-                        if (activeVid.currentTime >= activeVid.duration - 0.1) {
-                            activeVid.pause();
-                            activeVid.ontimeupdate = null;
-                        }
-                    };
-                }
-            };
-        }
-
         async function fetchData(id) {
             try {
-                const host = window.location.hostname;
-                const apiUrl = host.includes('github.dev') 
-                    ? `https://${host.replace('-5500', '-3001')}/api/frase/${id}`
-                    : `http://localhost:3001/api/frase/${id}`;
-
+                // URL DA SUA API (Baseada no link que você enviou)
+                const apiUrl = `https://bug-free-space-trout-69wj5r565p4q29q7-3001.app.github.dev/api/frase/${id}`;
+                
+                console.log(`Buscando: ${apiUrl}`);
                 const res = await fetch(apiUrl);
+                
+                if (!res.ok) throw new Error(`Status: ${res.status}`);
+
                 const data = await res.json();
-                phrasesPool = data.frases || ["OUNCE STOCK"];
-            } catch { phrasesPool = ["OUNCE STOCK"]; }
+                if (data.frases) {
+                    phrasesPool = data.frases;
+                }
+            } catch (err) {
+                console.error("Erro na API:", err);
+                phrasesPool = ["OUNCE STOCK", "QUALIDADE PREMIUM"];
+            }
             phraseIdx = 0;
+        }
+
+        async function playVideo(src, isLoop, onEnd) {
+            if (idleVid.getAttribute('src') !== src) {
+                idleVid.src = src;
+            }
+            idleVid.loop = isLoop;
+            textTriggered = false; 
+
+            try {
+                await idleVid.play();
+                requestAnimationFrame(() => {
+                    idleVid.classList.add('active'); 
+                    activeVid.classList.remove('active');
+                    let temp = activeVid; activeVid = idleVid; idleVid = temp;
+
+                    if (!isLoop) {
+                        activeVid.onended = onEnd;
+                    } else {
+                        activeVid.ontimeupdate = () => {
+                            const timeLeft = activeVid.duration - activeVid.currentTime;
+                            if (timeLeft <= 2.0 && !textTriggered && !isTransitioning) {
+                                textTriggered = true;
+                                updateText();
+                            }
+                            if (activeVid.currentTime >= activeVid.duration - 0.1) {
+                                activeVid.pause();
+                                activeVid.ontimeupdate = null;
+                            }
+                        };
+                    }
+                });
+            } catch (e) { console.warn(e); }
         }
 
         function updateText() {
@@ -136,27 +143,29 @@
 
         function hideText() {
             textElem.classList.remove('visible');
+            setTimeout(() => { if(!textElem.classList.contains('visible')) textElem.innerText = ""; }, 500);
         }
 
-        function changeProduct(target, btn) {
+        async function changeProduct(target, btn) {
             if(isTransitioning || current === target) return;
-            
             isTransitioning = true;
-            hideText(); // Remove a frase imediatamente na troca
+            hideText(); 
 
             document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            playVideo(assets[current].to[target], false, () => {
+            const fetchPromise = fetchData(assets[target].id);
+
+            playVideo(assets[current].to[target], false, async () => {
                 current = target;
-                fetchData(assets[current].id);
+                await fetchPromise;
                 playVideo(assets[current].file, true);
                 isTransitioning = false;
             });
         }
 
-        window.onload = () => {
-            fetchData(4);
+        window.onload = async () => {
+            await fetchData(4); 
             playVideo(assets.COCA.file, true);
         };
     </script>
