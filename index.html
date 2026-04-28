@@ -12,7 +12,7 @@
         #video-wrapper { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; background: #000; }
         video { 
             position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; 
-            object-fit: cover; transition: opacity 0.25s ease-in-out; opacity: 0; 
+            object-fit: cover; transition: opacity 0.01s linear; opacity: 0; 
         }
         video.active { opacity: 1; z-index: 2; }
 
@@ -50,8 +50,8 @@
 <body>
 
     <div id="video-wrapper">
-        <video id="vid1" class="active" autoplay muted playsinline></video>
-        <video id="vid2" autoplay muted playsinline></video>
+        <video id="vid1" class="active" autoplay muted playsinline preload="auto"></video>
+        <video id="vid2" autoplay muted playsinline preload="auto"></video>
     </div>
 
     <div id="overlay-text"><h1 id="text-target" class="phrase"></h1></div>
@@ -84,19 +84,15 @@
             } catch (err) { phrasesPool = ["OUNCE AI"]; }
         }
 
-        // Função de play otimizada com troca instantânea de canais (Active/Idle)
         async function playVideo(src, mode, onEnd) {
             activeVid.ontimeupdate = null;
-            
             idleVid.src = src;
             idleVid.load();
-            idleVid.currentTime = 0.05;
 
-            idleVid.oncanplaythrough = async () => {
-                idleVid.oncanplaythrough = null;
+            idleVid.onloadeddata = async () => {
+                idleVid.onloadeddata = null;
                 try {
                     await idleVid.play();
-                    
                     idleVid.classList.add('active'); 
                     activeVid.classList.remove('active');
                     
@@ -105,18 +101,18 @@
                     idleVid = oldVid;
 
                     activeVid.ontimeupdate = function() {
-                        const cutTime = 0.3; // Corte de segurança para fluidez
+                        // AJUSTE: Tirei mais frames do final da transição (0.4s)
+                        const cutTime = (mode === 'TRANSITION') ? 0.7 : 0.5;
+                        
                         if (activeVid.currentTime >= activeVid.duration - cutTime) {
                             activeVid.ontimeupdate = null;
                             
                             if (mode === 'NORMAL_1') {
-                                // Terminou primeiro play, vai para o REVERSE
+                                // Inicia o reverso e mostra a frase IMEDIATAMENTE
+                                showText(); 
                                 playVideo(assets[current].rev, 'REVERSE', onEnd);
                             } 
                             else if (mode === 'REVERSE') {
-                                // Durante o reverse o texto aparece
-                                showText();
-                                // Terminou o reverse, volta para o NORMAL final
                                 playVideo(assets[current].file, 'NORMAL_FINAL', onEnd);
                             }
                             else if (mode === 'NORMAL_FINAL') {
@@ -124,13 +120,12 @@
                                 toggleButtons(true);
                                 if (onEnd) onEnd();
                             }
-                            else {
-                                // Caso seja transição
+                            else if (mode === 'TRANSITION') {
                                 if (onEnd) onEnd();
                             }
                         }
                     };
-                } catch (e) { console.error(e); }
+                } catch (e) { console.warn("Play interrompido"); }
             };
         }
 
@@ -168,7 +163,6 @@
                 return;
             }
 
-            // Executa transição entre produtos
             playVideo(assets[current].to[target], 'TRANSITION', async () => {
                 current = target;
                 await fetchPromise;
